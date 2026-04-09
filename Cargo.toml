@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "libfdk-aac-sys",
+    "aac-codec",
+    "aac-audio",
+]
+resolver = "2"

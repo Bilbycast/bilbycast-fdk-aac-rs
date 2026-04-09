@@ -1,0 +1,9 @@
+[package]
+name = "aac-codec"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Pure Rust types for AAC codec configuration, errors, and stream info"
+
+[dependencies]
+thiserror = "2.0.18"

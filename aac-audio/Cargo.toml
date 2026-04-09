@@ -1,0 +1,10 @@
+[package]
+name = "aac-audio"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Safe Rust wrapper around Fraunhofer FDK AAC for decode and encode"
+
+[dependencies]
+libfdk-aac-sys = { path = "../libfdk-aac-sys" }
+aac-codec = { path = "../aac-codec" }
