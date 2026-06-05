@@ -12,7 +12,7 @@ The marquee use case is **AAC contribution audio in → broadcast distribution o
 
 | Crate | Role |
 |-------|------|
-| **libfdk-aac-sys** | Raw FFI bindings via `bindgen`. Builds fdk-aac from a vendored git submodule (`vendor/fdk-aac/`) using CMake. |
+| **libfdk-aac-sys** | Raw FFI bindings via `bindgen`. Builds fdk-aac from a vendored git submodule (`libfdk-aac-sys/vendor/fdk-aac`) using CMake. |
 | **aac-codec** | Pure-Rust data types — codec configuration, error types, stream info. No C dependency. |
 | **aac-audio** | Safe high-level API — `AacDecoder` and `AacEncoder`. This is the crate that bilbycast-edge depends on. |
 
@@ -59,4 +59,4 @@ This crate is enabled via the `fdk-aac` feature flag in bilbycast-edge (on by de
 
 This project is licensed under the [Mozilla Public License 2.0](LICENSE).
 
-Note: The vendored Fraunhofer FDK AAC library (`vendor/fdk-aac/`) is licensed under its own terms — see the license file within that submodule for details.
+Note: The vendored Fraunhofer FDK AAC library (`libfdk-aac-sys/vendor/fdk-aac`) is licensed under its own terms — see the license file within that submodule for details.

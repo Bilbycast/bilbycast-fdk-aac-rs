@@ -8,7 +8,7 @@ Rust wrapper around Fraunhofer FDK AAC v2.0.3 for the bilbycast ecosystem. Provi
 
 | Crate | Role |
 |-------|------|
-| **libfdk-aac-sys** | Raw FFI bindings to fdk-aac via bindgen. Vendored build from `vendor/fdk-aac/` (git submodule). |
+| **libfdk-aac-sys** | Raw FFI bindings to fdk-aac via bindgen. Vendored build from `libfdk-aac-sys/vendor/fdk-aac` (git submodule). |
 | **aac-codec** | Pure-Rust data types (config, errors, stream info). No C dependency. |
 | **aac-audio** | Safe wrapper — `AacDecoder` and `AacEncoder`. The crate bilbycast-edge depends on. |
 
@@ -82,7 +82,7 @@ No OpenSSL required (unlike bilbycast-libsrt-rs).
 1. **Per-instance state only** — no global init/cleanup (unlike libsrt)
 2. **Send but not Sync** — handles can move between threads but require &mut for decode/encode
 3. **INT_PCM is s16** — fdk-aac compiled with default SYS_S16; buffer sizing assumes this
-4. **Frame sizes vary by profile** — AAC-LC: 1024, HE-AAC: 2048, LD/ELD: 480/512. Use `frame_size()` accessor
+4. **Frame sizes vary by profile** — AAC-LC: 1024, HE-AAC: 2048, LD/ELD: 480/512. Use the `AacEncoder::frame_size()` accessor (encoder only); the decoder reports it as the `frame_size` field on each `DecodedFrame`
 5. **HE-AAC v2 requires stereo** — mono input rejected at open time
 
 ## Integration with bilbycast-edge
