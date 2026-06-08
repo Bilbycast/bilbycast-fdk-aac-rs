@@ -1,6 +1,6 @@
 [package]
 name = "libfdk-aac-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MPL-2.0"
 description = "Raw FFI bindings to Fraunhofer FDK AAC v2.0.3"
