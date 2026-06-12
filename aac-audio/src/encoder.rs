@@ -35,6 +35,13 @@ pub struct AacEncoder {
     channels: u8,
     /// AudioSpecificConfig bytes from the encoder (for signaling).
     audio_specific_config: Vec<u8>,
+    /// Codec delay in PCM samples per channel (`AACENC_InfoStruct.nDelay`).
+    /// The decoded content of output frame *n* starts this many samples
+    /// EARLIER than the input samples submitted for frame *n* — callers
+    /// that derive output timestamps from input timestamps must subtract
+    /// it or audio plays late by exactly this amount (≈ 2600 samples ≈
+    /// 54 ms at 48 kHz for AAC-LC).
+    codec_delay: u32,
     /// Pre-allocated output buffer.
     out_buf: Vec<u8>,
     /// Scratch buffer for planar f32 → interleaved s16 conversion.
@@ -68,6 +75,7 @@ impl AacEncoder {
             frame_size: 0,
             channels: config.channels,
             audio_specific_config: Vec::new(),
+            codec_delay: 0,
             out_buf: vec![0u8; MAX_OUTPUT_BYTES],
             pcm_scratch: Vec::new(),
         };
@@ -171,6 +179,7 @@ impl AacEncoder {
         }
 
         self.frame_size = info.frameLength as u32;
+        self.codec_delay = info.nDelay as u32;
 
         // Extract AudioSpecificConfig
         let asc_len = info.confSize as usize;
@@ -179,6 +188,13 @@ impl AacEncoder {
         }
 
         Ok(())
+    }
+
+    /// Codec delay in PCM samples per channel (`AACENC_InfoStruct.nDelay`).
+    /// See the field docs — subtract this from input-derived output
+    /// timestamps for content-true labelling.
+    pub fn codec_delay_samples(&self) -> u32 {
+        self.codec_delay
     }
 
     /// Encode one frame of planar f32 PCM.
