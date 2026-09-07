@@ -1,6 +1,6 @@
 [package]
 name = "libfdk-aac-sys"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 license = "MPL-2.0"
 description = "Raw FFI bindings to Fraunhofer FDK AAC v2.0.3"
@@ -12,6 +12,6 @@ default = []
 system-libfdk-aac = []
 
 [build-dependencies]
-bindgen = "0.72.1"
+bindgen = "0.73.1"
 cmake = "0.1.58"
 pkg-config = "0.3.34"
