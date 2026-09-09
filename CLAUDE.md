@@ -23,7 +23,7 @@ Rust wrapper around Fraunhofer FDK AAC v2.0.3 for the bilbycast ecosystem. Provi
 | AAC-ELD | Yes | Yes |
 | Multichannel (up to 7.1) | Yes | Yes |
 | ADTS framing | Yes | Yes (output) |
-| LATM framing | Yes | No |
+| LATM framing | Yes | Yes (set `EncoderConfig.transport = TransportType::Latm`; the convenience constructors default to ADTS) |
 | Raw access units | Yes | Yes (output) |
 
 ## Build & Test
@@ -71,6 +71,7 @@ No OpenSSL required (unlike bilbycast-libsrt-rs).
 - `encode_frame_s16(interleaved)` — encode from interleaved s16 directly (avoids conversion)
 - `flush()` — end-of-stream flush
 - `audio_specific_config()` — for FLV/SDP signaling
+- `EncoderConfig.transport` picks the transmux and `configure()` passes it straight to `AACENC_TRANSMUX`: `Raw` → 0, `Adts` → 2, `Latm` → 10. `open()` rejects none of them, so **LATM output is available on the encoder**, not decode-only. It is easy to believe otherwise because all three convenience constructors (`aac_lc` / `he_aac_v1` / `he_aac_v2`) hard-code `transport: TransportType::Adts` — LATM means setting the field yourself after building the config. (Value 10 is fdk-aac's LOAS audio-sync-stream transmux, the self-framing LATM carriage a TS/RTP consumer wants; the `// TT_MP4_LATM_MCP1` comment beside it in `encoder.rs` is mislabelled — MCP1 is 6 in the vendored `FDK_audio.h`.)
 - Internal: wrapper converts planar f32 to interleaved s16, sets up AACENC_BufDesc, calls aacEncEncode
 
 ### Helper
