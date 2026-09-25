@@ -130,20 +130,15 @@ impl ChannelMode {
 }
 
 /// SBR signaling mode for HE-AAC encoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SbrSignaling {
     /// Implicit SBR signaling (backward compatible with AAC-LC decoders).
+    #[default]
     Implicit,
     /// Explicit backward compatible signaling.
     ExplicitBackwardCompatible,
     /// Explicit hierarchical signaling (for MPEG-DASH).
     ExplicitHierarchical,
-}
-
-impl Default for SbrSignaling {
-    fn default() -> Self {
-        SbrSignaling::Implicit
-    }
 }
 
 /// Encoder configuration.

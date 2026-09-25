@@ -8,7 +8,7 @@
 //! Override: enable `system-libfdk-aac` feature to use pkg-config.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -86,7 +86,7 @@ fn main() {
 }
 
 /// Build fdk-aac from vendored source using CMake.
-fn build_vendored(out_dir: &PathBuf) -> PathBuf {
+fn build_vendored(out_dir: &Path) -> PathBuf {
     let fdk_source = PathBuf::from("vendor/fdk-aac");
     if !fdk_source.exists() {
         panic!(

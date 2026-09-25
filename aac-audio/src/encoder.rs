@@ -146,8 +146,12 @@ impl AacEncoder {
     fn set_param(&self, param: AACENC_PARAM, value: u32) -> Result<(), AacError> {
         let err = unsafe { aacEncoder_SetParam(self.handle, param, value) };
         if err != AACENC_ERROR_AACENC_OK {
+            // bindgen types this C enum as c_uint under the Itanium ABI but
+            // c_int under MSVC, so the cast is only a no-op on some targets.
+            #[allow(clippy::unnecessary_cast)]
+            let param = param as u32;
             return Err(AacError::EncoderSetParam {
-                param: param as u32,
+                param,
                 code: err as i32,
             });
         }
@@ -184,7 +188,7 @@ impl AacEncoder {
         // Extract AudioSpecificConfig
         let asc_len = info.confSize as usize;
         if asc_len > 0 && asc_len <= info.confBuf.len() {
-            self.audio_specific_config = info.confBuf[..asc_len].iter().map(|&b| b as u8).collect();
+            self.audio_specific_config = info.confBuf[..asc_len].to_vec();
         }
 
         Ok(())
@@ -217,12 +221,8 @@ impl AacEncoder {
 
         // Convert planar f32 to interleaved s16
         for s in 0..frame_size {
-            for ch in 0..channels {
-                let sample = if s < planar[ch].len() {
-                    planar[ch][s]
-                } else {
-                    0.0
-                };
+            for (ch, plane) in planar.iter().enumerate() {
+                let sample = plane.get(s).copied().unwrap_or(0.0);
                 self.pcm_scratch[s * channels + ch] =
                     (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
             }
@@ -252,7 +252,7 @@ impl AacEncoder {
         let channels = self.channels as usize;
         let frame_size = self.frame_size as usize;
         let num_input_samples = (frame_size * channels) as i32;
-        let input_bytes = num_input_samples as i32 * 2; // s16 = 2 bytes per sample
+        let input_bytes = num_input_samples * 2; // s16 = 2 bytes per sample
 
         // Set up input buffer descriptor
         let mut in_buf_ptr = self.pcm_scratch.as_mut_ptr() as *mut std::ffi::c_void;

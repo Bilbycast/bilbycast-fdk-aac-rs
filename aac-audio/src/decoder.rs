@@ -87,10 +87,10 @@ impl AacDecoder {
 
     fn configure_raw(&mut self, asc: &[u8]) -> Result<(), AacError> {
         let mut asc_ptr = asc.as_ptr() as *mut u8;
-        let mut asc_len = asc.len() as u32;
+        let asc_len = asc.len() as u32;
 
         let err = unsafe {
-            aacDecoder_ConfigRaw(self.handle, &mut asc_ptr, &mut asc_len)
+            aacDecoder_ConfigRaw(self.handle, &mut asc_ptr, &asc_len)
         };
 
         if err != AAC_DECODER_ERROR_AAC_DEC_OK {
@@ -111,11 +111,11 @@ impl AacDecoder {
     pub fn decode_frame(&mut self, data: &[u8]) -> Result<DecodedFrame, AacError> {
         // Feed compressed data to the decoder's internal buffer
         let mut buf_ptr = data.as_ptr() as *mut u8;
-        let mut buf_size = data.len() as u32;
+        let buf_size = data.len() as u32;
         let mut bytes_valid = data.len() as u32;
 
         let err = unsafe {
-            aacDecoder_Fill(self.handle, &mut buf_ptr, &mut buf_size, &mut bytes_valid)
+            aacDecoder_Fill(self.handle, &mut buf_ptr, &buf_size, &mut bytes_valid)
         };
 
         if err != AAC_DECODER_ERROR_AAC_DEC_OK {
