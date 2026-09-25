@@ -39,8 +39,13 @@ pub struct AacEncoder {
     /// The decoded content of output frame *n* starts this many samples
     /// EARLIER than the input samples submitted for frame *n* — callers
     /// that derive output timestamps from input timestamps must subtract
-    /// it or audio plays late by exactly this amount (≈ 2600 samples ≈
-    /// 54 ms at 48 kHz for AAC-LC).
+    /// it or audio plays late by exactly this amount. For AAC-LC it is 2048
+    /// samples (42.7 ms at 48 kHz; it follows the frame length, not the
+    /// rate): `DELAY_AAC` = 1024 MDCT + 576 block-switching lookahead =
+    /// 1600, plus the metadata module's 448-sample round-up. For HE-AAC it
+    /// also counts the decoder's SBR delay (5058 for stereo HE-AAC v1 at
+    /// 48 kHz). Library-defined, so read it here rather than hard-coding a
+    /// figure.
     codec_delay: u32,
     /// Pre-allocated output buffer.
     out_buf: Vec<u8>,
@@ -194,9 +199,12 @@ impl AacEncoder {
         Ok(())
     }
 
-    /// Codec delay in PCM samples per channel (`AACENC_InfoStruct.nDelay`).
-    /// See the field docs — subtract this from input-derived output
-    /// timestamps for content-true labelling.
+    /// Codec delay in PCM samples per channel (`AACENC_InfoStruct.nDelay`):
+    /// 2048 for AAC-LC at any rate, more for HE-AAC because it counts the
+    /// decoder's SBR delay. Subtract it from input-derived output
+    /// timestamps for content-true labelling. A round trip through this
+    /// crate's [`AacDecoder`](crate::AacDecoder) delays content by exactly
+    /// this much, since that decoder adds none of its own.
     pub fn codec_delay_samples(&self) -> u32 {
         self.codec_delay
     }

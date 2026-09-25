@@ -82,6 +82,7 @@ Left at the defaults, AAC-LC decode was **1744 samples late at 48 kHz** (1024 co
 - `encode_frame_s16(interleaved)` — encode from interleaved s16 directly (avoids conversion)
 - `flush()` — end-of-stream flush
 - `audio_specific_config()` — for FLV/SDP signaling
+- `codec_delay_samples()` — `AACENC_InfoStruct.nDelay`, to subtract from input-derived output timestamps: **2048 for AAC-LC** (it follows the frame length, not the rate: `DELAY_AAC` 1600 = 1024 MDCT + 576 block-switch lookahead, plus the metadata module's 448 round-up; pinned by `aac_lc_encoder_delay_is_2048`), more for HE-AAC because it includes the decoder's SBR delay. Older docs said "≈ 2600 / 54 ms"; that figure was never right
 - `EncoderConfig.transport` picks the transmux and `configure()` passes it straight to `AACENC_TRANSMUX`: `Raw` → 0, `Adts` → 2, `Latm` → 10. `open()` rejects none of them, so **LATM output is available on the encoder**, not decode-only. It is easy to believe otherwise because all three convenience constructors (`aac_lc` / `he_aac_v1` / `he_aac_v2`) hard-code `transport: TransportType::Adts` — LATM means setting the field yourself after building the config. (Value 10 is fdk-aac's LOAS audio-sync-stream transmux, the self-framing LATM carriage a TS/RTP consumer wants; the `// TT_MP4_LATM_MCP1` comment beside it in `encoder.rs` is mislabelled — MCP1 is 6 in the vendored `FDK_audio.h`.)
 - Internal: wrapper converts planar f32 to interleaved s16, sets up AACENC_BufDesc, calls aacEncEncode
 
