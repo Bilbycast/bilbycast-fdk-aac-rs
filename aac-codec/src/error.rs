@@ -14,6 +14,10 @@ pub enum AacError {
     #[error("AAC decoder open failed (transport type not supported or out of memory)")]
     DecoderOpen,
 
+    /// `aacDecoder_SetParam` failed while opening the decoder.
+    #[error("AAC decoder set param failed (param 0x{param:04X}): fdk-aac error code 0x{code:04X}")]
+    DecoderSetParam { param: u32, code: i32 },
+
     /// `aacDecoder_ConfigRaw` failed.
     #[error("AAC decoder config failed: fdk-aac error code 0x{0:04X}")]
     DecoderConfig(i32),

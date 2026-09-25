@@ -15,6 +15,17 @@ use libfdk_aac_sys::*;
 /// Maximum output PCM buffer size: max frame size (2048 for HE-AAC) * max channels (8).
 const MAX_PCM_SAMPLES: usize = 2048 * 8;
 
+/// `AAC_CONCEAL_METHOD` value for noise substitution (`ConcealMethodNoise`
+/// in fdk-aac's `conceal_types.h`), which adds no output delay.
+const CONCEAL_NOISE_SUBSTITUTION: i32 = 1;
+
+/// `AAC_PCM_LIMITER_ENABLE` value that switches the PCM limiter off.
+const LIMITER_OFF: i32 = 0;
+
+/// `AAC_DRC_REFERENCE_LEVEL` value that switches off loudness normalisation
+/// (and MPEG-4 DRC with it): any negative value does.
+const LOUDNESS_NORMALISATION_OFF: i32 = -1;
+
 /// Result of decoding one AAC frame.
 #[derive(Debug)]
 pub struct DecodedFrame {
@@ -29,6 +40,20 @@ pub struct DecodedFrame {
 ///
 /// Wraps the fdk-aac `aacDecoder_*` API. Each instance is independent
 /// (no global state). Not `Sync` — requires `&mut self` for decode.
+///
+/// Every constructor opens the decoder with three fdk-aac defaults changed,
+/// so the PCM is the encoded content, on time and at the encoded level:
+/// - error concealment by **noise substitution** (no delay) instead of
+///   energy interpolation (holds one frame back);
+/// - the **PCM limiter off** (no lookahead delay; a sample reconstructed
+///   past full scale is hard-clipped at the s16 conversion instead of being
+///   soft-limited);
+/// - **loudness normalisation off**, so a stream's `prog_ref_level`
+///   metadata no longer re-levels it toward a -24 dB target.
+///
+/// fdk-aac's defaults delayed AAC-LC output by 1744 samples at 48 kHz
+/// (36.3 ms); with these settings the decoder adds none (see
+/// [`output_delay_samples`](Self::output_delay_samples)).
 pub struct AacDecoder {
     handle: HANDLE_AACDECODER,
     /// Pre-allocated buffer for interleaved INT_PCM (s16) output from fdk-aac.
@@ -72,17 +97,81 @@ impl AacDecoder {
         Ok(decoder)
     }
 
+    /// Open a handle and switch off the fdk-aac defaults that delay or
+    /// re-level the output, so decoded PCM is the encoded content, on time.
+    /// Left at the library defaults, the decoder delays every sample by
+    /// 1744 at 48 kHz (AAC-LC): one frame held back by energy-interpolation
+    /// concealment plus the limiter's 15 ms lookahead. No consumer
+    /// compensated that, so every decoded path presented AAC audio 36.3 ms
+    /// late.
+    ///
+    /// - **Concealment: noise substitution (1)** instead of energy
+    ///   interpolation (2), which needs the *next* frame before it can emit
+    ///   the current one. Noise substitution adds no delay; it is also
+    ///   FFmpeg's `libfdk_aac` decoder default. This wrapper never asks
+    ///   fdk-aac to conceal a missing frame (`decode_frame` passes no
+    ///   `AACDEC_CONCEAL` flag, and a frame fdk-aac flags as a decode error
+    ///   is returned as `Err` with its PCM discarded), so the method's
+    ///   audible effect here is nil and the removed frame of delay is the
+    ///   whole change.
+    /// - **PCM limiter: off (0)** instead of auto (on for every non-low-delay
+    ///   AOT), which removes its attack-time lookahead. A shorter attack
+    ///   plus compensation was the alternative, but it would leave a
+    ///   residual delay for every consumer to subtract. The cost: a sample
+    ///   reconstructed past full scale is hard-clipped at the s16
+    ///   conversion (fdk-aac's `scaleValuesSaturate`; `INT_PCM` is s16)
+    ///   instead of being soft-limited. With the next setting in place that
+    ///   needs a source mastered at or near 0 dBFS; loudness-normalised
+    ///   broadcast audio (EBU R 128 -1 dBTP, ATSC A/85 -2 dBTP) keeps that
+    ///   headroom.
+    /// - **Loudness normalisation: off (`AAC_DRC_REFERENCE_LEVEL` -1)**
+    ///   instead of normalising to fdk-aac's default -24 dB target. By
+    ///   default, a stream that carries an MPEG-4 `prog_ref_level` is
+    ///   re-levelled by `target - prog_ref_level` dB: a programme declaring
+    ///   -31 dB is boosted 7 dB, which the limiter used to soft-limit and
+    ///   which would hard-clip with it off, and one declaring -18 dB is cut
+    ///   6 dB. The metadata does not survive a re-encode, so that gain was
+    ///   baked into the output silently and biased any loudness meter fed
+    ///   from this decoder. Off, the PCM is at the encoded level, as from
+    ///   the libavcodec AC-3 / E-AC-3 decoders, which leave dialnorm
+    ///   unapplied by default (`target_level` 0). A negative level also
+    ///   switches off MPEG-4 DRC compression, whose boost and cut factors
+    ///   default to 0 and so were already inert.
+    ///
+    /// The settings are stored on the handle and survive `ConfigRaw` and
+    /// in-band reconfiguration. The handle is closed if any of them fails.
     fn open_internal(transport: TRANSPORT_TYPE) -> Result<Self, AacError> {
         let handle = unsafe { aacDecoder_Open(transport, 1) };
         if handle.is_null() {
             return Err(AacError::DecoderOpen);
         }
 
-        Ok(Self {
+        // Owned from here on: an early return below drops `decoder`, and
+        // `Drop` closes the handle.
+        let decoder = Self {
             handle,
             pcm_buf: vec![0i16; MAX_PCM_SAMPLES],
             info: None,
-        })
+        };
+        decoder.set_param(AACDEC_PARAM_AAC_CONCEAL_METHOD, CONCEAL_NOISE_SUBSTITUTION)?;
+        decoder.set_param(AACDEC_PARAM_AAC_PCM_LIMITER_ENABLE, LIMITER_OFF)?;
+        decoder.set_param(AACDEC_PARAM_AAC_DRC_REFERENCE_LEVEL, LOUDNESS_NORMALISATION_OFF)?;
+        Ok(decoder)
+    }
+
+    fn set_param(&self, param: AACDEC_PARAM, value: i32) -> Result<(), AacError> {
+        let err = unsafe { aacDecoder_SetParam(self.handle, param, value) };
+        if err != AAC_DECODER_ERROR_AAC_DEC_OK {
+            // bindgen types this C enum as c_uint under the Itanium ABI but
+            // c_int under MSVC, so the cast is only a no-op on some targets.
+            #[allow(clippy::unnecessary_cast)]
+            let param = param as u32;
+            return Err(AacError::DecoderSetParam {
+                param,
+                code: err as i32,
+            });
+        }
+        Ok(())
     }
 
     fn configure_raw(&mut self, asc: &[u8]) -> Result<(), AacError> {
@@ -156,6 +245,7 @@ impl AacDecoder {
             profile: AacProfile::from_aot(aot),
             aot,
             channel_config: si.channelConfig as u8,
+            output_delay: si.outputDelay,
         });
 
         // Convert interleaved s16 to planar f32
@@ -188,6 +278,37 @@ impl AacDecoder {
     /// Number of output channels (available after first successful decode).
     pub fn channels(&self) -> Option<u8> {
         self.info.as_ref().map(|i| i.channels)
+    }
+
+    /// Output delay in samples per channel at the output sample rate, as
+    /// fdk-aac reported it for the most recently decoded frame
+    /// ([`StreamInfo::output_delay`]); `None` before the first successful
+    /// decode.
+    ///
+    /// Decoded PCM sample `j` of the frame that access unit `k` produced
+    /// carries the content of AU `k`'s sample `j - output_delay`.
+    ///
+    /// **0 for AAC-LC, AAC-LD and AAC-ELD**, because this decoder is opened
+    /// with no delay-adding options (see [`AacDecoder`]): the first decoded
+    /// sample is sample 0 of the first access unit, and decoded PCM may be
+    /// stamped with its AU's own timestamp.
+    ///
+    /// For HE-AAC v1/v2 it is the SBR QMF delay (962 at the output rate on
+    /// the dual-rate path), which is part of the codec. Encoders account for
+    /// it in one of two ways, and the caller has to know which:
+    /// - fdk-aac's encoder counts it in its `nDelay`
+    ///   (`AacEncoder::codec_delay_samples`), so timestamps derived as
+    ///   `input_pts - nDelay` already assume a decoder that emits it — do
+    ///   **not** subtract it again, or the audio lands early by 962.
+    /// - fdk-aac's own header says an edit list written from `nDelayCore`
+    ///   (which excludes it) expects the decoder to "take into account any
+    ///   delay caused by the SBR module", and FFmpeg's `libfdk_aac` decoder
+    ///   does so by dropping `outputDelay` samples from the start.
+    ///
+    /// A non-zero value on a stream without SBR or MPEG Surround means a
+    /// delay-adding option took effect and is worth a warning.
+    pub fn output_delay_samples(&self) -> Option<u32> {
+        self.info.as_ref().map(|i| i.output_delay)
     }
 
     /// Reset decoder state without closing. For stream restarts.

@@ -23,4 +23,22 @@ pub struct StreamInfo {
     pub aot: u8,
     /// Raw channel configuration from the bitstream.
     pub channel_config: u8,
+    /// Samples per channel, at `sample_rate`, by which the decoder reports
+    /// delaying its output (fdk-aac `CStreamInfo.outputDelay`, re-read on
+    /// every decoded frame).
+    ///
+    /// `aac-audio` opens every decoder with noise-substitution concealment
+    /// and the PCM limiter off, and neither adds delay, so this is **0 for
+    /// AAC-LC, AAC-LD and AAC-ELD**. fdk-aac's own defaults would report
+    /// 1744 for AAC-LC at 48 kHz: one frame (1024) held back by energy-
+    /// interpolation concealment plus the limiter's 15 ms attack (720).
+    ///
+    /// For SBR streams (HE-AAC v1/v2) what remains is the SBR QMF-bank delay
+    /// (962 samples at the output rate on the usual dual-rate path, 481 when
+    /// SBR runs downsampled), and MPEG Surround adds its own figure. That
+    /// part belongs to the codec rather than to fdk-aac's settings and cannot
+    /// be switched off. Whether a caller should subtract it depends on how
+    /// the source encoder stamped its timestamps — see
+    /// `aac_audio::AacDecoder::output_delay_samples`.
+    pub output_delay: u32,
 }

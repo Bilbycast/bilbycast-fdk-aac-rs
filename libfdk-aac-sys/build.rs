@@ -62,6 +62,7 @@ fn main() {
         .allowlist_type("AACENC_BufDesc")
         .allowlist_type("AACENC_InArgs")
         .allowlist_type("AACENC_OutArgs")
+        .allowlist_type("AACENC_MetaData")
         .allowlist_type("AACENC_PARAM")
         // Shared enums/types
         .allowlist_type("TRANSPORT_TYPE")

@@ -62,6 +62,17 @@ No OpenSSL required (unlike bilbycast-libsrt-rs).
 - `decode_frame(data)` → `DecodedFrame { planar: Vec<Vec<f32>>, frame_size }`
 - Output is planar f32 PCM matching bilbycast-edge's existing audio pipeline API
 - Internal: fdk-aac outputs interleaved INT_PCM (s16), wrapper deinterleaves to planar f32
+- `output_delay_samples()` / `StreamInfo.output_delay` — fdk-aac's `CStreamInfo.outputDelay`, `None` until the first decode
+
+**Every constructor changes three fdk-aac defaults** (`open_internal`, which closes the handle if any `aacDecoder_SetParam` fails and returns `AacError::DecoderSetParam`):
+
+| Setting | fdk-aac default | Here | Why |
+|---|---|---|---|
+| `AAC_CONCEAL_METHOD` | 2, energy interpolation (holds one frame back) | 1, noise substitution | No delay. The wrapper never passes `AACDEC_CONCEAL` and returns `Err` (PCM discarded) on a decode error, so the method has no audible effect here — the removed frame of delay is the whole change |
+| `AAC_PCM_LIMITER_ENABLE` | auto: on for every non-LD/ELD AOT, 15 ms attack lookahead | 0, off | No delay. Cost: a sample reconstructed past full scale hard-clips at the s16 conversion instead of being soft-limited |
+| `AAC_DRC_REFERENCE_LEVEL` | 96, i.e. normalise to -24 dB | -1, off | A stream carrying MPEG-4 `prog_ref_level` was re-levelled by `-24 - prog_ref_level` dB: -31 dB boosted +7 dB (which hard-clips with the limiter off), -18 dB cut 6 dB. The metadata does not survive a re-encode, so the gain was baked in and biased loudness meters. Off, PCM is at the encoded level, as from libavcodec's AC-3 / E-AC-3 decoders (`target_level` 0) |
+
+Left at the defaults, AAC-LC decode was **1744 samples late at 48 kHz** (1024 concealment + 720 limiter; 1685 at 44.1 kHz), i.e. 36.3 ms that no consumer compensated. Now `output_delay` is **0 for AAC-LC / LD / ELD**, and an `AacEncoder` → `AacDecoder` round trip lands content exactly `AacEncoder::codec_delay_samples()` late (2048 for AAC-LC). For **HE-AAC v1/v2 it is 962** (the SBR QMF delay at the output rate; 481 downsampled): part of the codec, cannot be switched off, and fdk-aac's encoder already counts it in its `nDelay` (5058 for stereo HE-AAC v1 at 48 kHz), so a chain that stamps `input_pts - nDelay` must **not** subtract it again. A stream stamped the other way (edit list from `nDelayCore`, which excludes it) expects the decoder to remove it, as FFmpeg's `libfdk_aac` decoder does. Pinned by `aac-audio/tests/decoder_delay.rs` (delay + burst alignment, 48 / 44.1 kHz, ADTS + raw, in-band reconfig, HE-AAC) and `aac-audio/tests/decoder_level.rs` (streams encoded with `prog_ref_level` -31 / -18 dB through the raw FFI, which is why `AACENC_MetaData` is on the bindgen allowlist).
 
 ### Encoder
 
