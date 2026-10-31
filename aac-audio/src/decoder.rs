@@ -26,6 +26,10 @@ const LIMITER_OFF: i32 = 0;
 /// (and MPEG-4 DRC with it): any negative value does.
 const LOUDNESS_NORMALISATION_OFF: i32 = -1;
 
+/// `AAC_PCM_MAX_OUTPUT_CHANNELS` value that switches the downmix off: the
+/// decoder outputs every channel the stream carries.
+const DOWNMIX_OFF: i32 = -1;
+
 /// Result of decoding one AAC frame.
 #[derive(Debug)]
 pub struct DecodedFrame {
@@ -186,6 +190,33 @@ impl AacDecoder {
             return Err(AacError::DecoderConfig(err as i32));
         }
         Ok(())
+    }
+
+    /// Cap the decoder's output at `max` channels, or with `None` let it
+    /// output every channel the stream carries (up to eight).
+    ///
+    /// fdk-aac's own default is six (`pcmDmx_Reset`'s `numOutChannelsMax`):
+    /// a stream wider than that — 7.1 as channel configuration 7 or 12, or a
+    /// program_config_element naming eight channels — is mixed down to 5.1,
+    /// and [`channels`](Self::channels) reports the six. None of the three
+    /// constructors changes it, so a caller that wants a 7.1 stream's eight
+    /// channels sets `None` here. `Some(2)` mixes anything wider down to
+    /// stereo, `Some(1)` to mono, as fdk-aac's downmixer does (metadata the
+    /// stream carries for it is used). Takes effect from the next decoded
+    /// frame, and survives in-band reconfiguration.
+    ///
+    /// Refuses `Some(0)` and anything above eight.
+    pub fn set_max_output_channels(&mut self, max: Option<u8>) -> Result<(), AacError> {
+        let value = match max {
+            None => DOWNMIX_OFF,
+            Some(n @ 1..=8) => i32::from(n),
+            Some(n) => {
+                return Err(AacError::InvalidInput(format!(
+                    "max output channels must be 1..=8 (or None for no limit), got {n}"
+                )));
+            }
+        };
+        self.set_param(AACDEC_PARAM_AAC_PCM_MAX_OUTPUT_CHANNELS, value)
     }
 
     /// Decode one AAC frame.

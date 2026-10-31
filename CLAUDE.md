@@ -21,7 +21,7 @@ Rust wrapper around Fraunhofer FDK AAC v2.0.3 for the bilbycast ecosystem. Provi
 | HE-AAC v2 (PS) | Yes | Yes (stereo only) |
 | AAC-LD | Yes | Yes |
 | AAC-ELD | Yes | Yes |
-| Multichannel (up to 7.1) | Yes | Yes |
+| Multichannel (up to 7.1) | Yes — wider than 5.1 only with `set_max_output_channels(None)`: fdk-aac mixes it down to six by default | Yes |
 | ADTS framing | Yes | Yes (output) |
 | LATM framing | Yes | Yes (set `EncoderConfig.transport = TransportType::Latm`; the convenience constructors default to ADTS) |
 | Raw access units | Yes | Yes (output) |
@@ -63,6 +63,7 @@ No OpenSSL required (unlike bilbycast-libsrt-rs).
 - Output is planar f32 PCM matching bilbycast-edge's existing audio pipeline API
 - Internal: fdk-aac outputs interleaved INT_PCM (s16), wrapper deinterleaves to planar f32
 - `output_delay_samples()` / `StreamInfo.output_delay` — fdk-aac's `CStreamInfo.outputDelay`, `None` until the first decode
+- `set_max_output_channels(max)` — `AAC_PCM_MAX_OUTPUT_CHANNELS`. fdk-aac's own default is **six** (`pcmDmx_Reset`), so a 7.1 stream (channel configuration 7 or 12, or a PCE naming eight channels) decodes mixed down to 5.1 and `channels()` reports 6; `None` lets every channel through (8 for 7.1, each its own), `Some(1..=8)` caps it. No constructor changes the default. Pinned by `aac-audio/tests/decoder_channels.rs`
 
 **Every constructor changes three fdk-aac defaults** (`open_internal`, which closes the handle if any `aacDecoder_SetParam` fails and returns `AacError::DecoderSetParam`):
 

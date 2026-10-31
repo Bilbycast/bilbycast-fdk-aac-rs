@@ -25,7 +25,7 @@ The marquee use case is **AAC contribution audio in → broadcast distribution o
 | HE-AAC v2 (PS) | Yes | Yes (stereo only) |
 | AAC-LD | Yes | Yes |
 | AAC-ELD | Yes | Yes |
-| Multichannel (up to 7.1) | Yes | Yes |
+| Multichannel (up to 7.1) | Yes — wider than 5.1 only with `AacDecoder::set_max_output_channels(None)`: fdk-aac mixes it down to six by default | Yes |
 
 Supported input framing: ADTS, LATM/LOAS, and raw access units (with AudioSpecificConfig).
 
