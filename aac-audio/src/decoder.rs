@@ -200,19 +200,27 @@ impl AacDecoder {
     /// program_config_element naming eight channels — is mixed down to 5.1,
     /// and [`channels`](Self::channels) reports the six. None of the three
     /// constructors changes it, so a caller that wants a 7.1 stream's eight
-    /// channels sets `None` here. `Some(2)` mixes anything wider down to
-    /// stereo, `Some(1)` to mono, as fdk-aac's downmixer does (metadata the
-    /// stream carries for it is used). Takes effect from the next decoded
-    /// frame, and survives in-band reconfiguration.
+    /// channels sets `None` here. `Some(6)` mixes anything wider down to
+    /// 5.1, `Some(2)` to stereo, `Some(1)` to mono, as fdk-aac's downmixer
+    /// does (metadata the stream carries for it is used); `Some(8)` is the
+    /// same as `None` for any stream AAC carries. Takes effect from the next
+    /// decoded frame, and survives in-band reconfiguration.
     ///
-    /// Refuses `Some(0)` and anything above eight.
+    /// Those are the only caps fdk-aac's downmixer has
+    /// (`pcmDmx_SetParam(MAX_NUMBER_OF_OUTPUT_CHANNELS)` takes 1, 2, 6 and
+    /// 8): anything else — `Some(0)`, a count it has no layout for (3, 4, 5,
+    /// 7), anything above eight — is refused here with
+    /// [`AacError::InvalidInput`] naming them, where 3, 4, 5 and 7 used to
+    /// pass this check and fail inside fdk-aac as an opaque
+    /// [`AacError::DecoderSetParam`].
     pub fn set_max_output_channels(&mut self, max: Option<u8>) -> Result<(), AacError> {
         let value = match max {
             None => DOWNMIX_OFF,
-            Some(n @ 1..=8) => i32::from(n),
+            Some(n @ (1 | 2 | 6 | 8)) => i32::from(n),
             Some(n) => {
                 return Err(AacError::InvalidInput(format!(
-                    "max output channels must be 1..=8 (or None for no limit), got {n}"
+                    "max output channels must be 1, 2, 6 or 8 (fdk-aac's downmixer has no other \
+                     layout), or None for no limit; got {n}"
                 )));
             }
         };

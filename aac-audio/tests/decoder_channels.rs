@@ -110,8 +110,8 @@ fn with_no_limit_a_7_1_stream_decodes_to_eight_channels() {
     assert_eq!(heard, [0, 1, 2, 4, 5, 6, 7], "each input but the LFE on its own channel: {loudest:?}");
 }
 
-/// A cap below the stream's width mixes down to it; a cap the decoder has no
-/// meaning for is refused.
+/// A cap below the stream's width mixes down to it (stereo, 5.1); a cap the
+/// decoder has no layout for is refused by name.
 #[test]
 fn a_cap_mixes_down_and_a_bad_one_is_refused() {
     let (asc, aus) = seven_one();
@@ -119,8 +119,20 @@ fn a_cap_mixes_down_and_a_bad_one_is_refused() {
     dec.set_max_output_channels(Some(2)).expect("stereo");
     let (channels, _) = loudest_inputs(&mut dec, &aus);
     assert_eq!(channels, 2);
+    let mut dec = AacDecoder::open_raw(&asc).expect("decoder");
+    dec.set_max_output_channels(Some(6)).expect("5.1");
+    let (channels, _) = loudest_inputs(&mut dec, &aus);
+    assert_eq!(channels, 6);
     let mut dec = AacDecoder::open_adts().expect("decoder");
-    assert!(dec.set_max_output_channels(Some(0)).is_err());
-    assert!(dec.set_max_output_channels(Some(9)).is_err());
-    assert!(dec.set_max_output_channels(Some(8)).is_ok());
+    for ok in [1u8, 2, 6, 8] {
+        assert!(dec.set_max_output_channels(Some(ok)).is_ok(), "{ok}");
+    }
+    // fdk-aac's downmixer has no layout for 3, 4, 5 or 7: refused here,
+    // by name, rather than inside fdk-aac as an opaque set-param error.
+    for bad in [0u8, 3, 4, 5, 7, 9] {
+        match dec.set_max_output_channels(Some(bad)) {
+            Err(aac_audio::AacError::InvalidInput(why)) => assert!(why.contains("1, 2, 6 or 8"), "{bad}: {why}"),
+            other => panic!("{bad}: {other:?}"),
+        }
+    }
 }
